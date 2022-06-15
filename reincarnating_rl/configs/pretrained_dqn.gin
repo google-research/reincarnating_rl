@@ -1,0 +1,59 @@
+# Hyperparameters follow the classic Nature DQN, but we modify as necessary to
+# match those used in Rainbow (Hessel et al., 2018), to ensure apples-to-apples
+# comparison.
+import dopamine.discrete_domains.atari_lib
+import dopamine.discrete_domains.run_experiment
+import dopamine.jax.agents.dqn.dqn_agent
+import dopamine.replay_memory.circular_replay_buffer
+import dopamine.replay_memory.prioritized_replay_buffer
+import reincarnating_rl.persistent_dqn_agent
+import reincarnating_rl.pretrained_dqn_agent
+import reincarnating_rl.teacher_dqn_agent
+import reincarnating_rl.run_experiment
+
+JaxDQNAgent.gamma = 0.99
+JaxDQNAgent.update_horizon = 1
+JaxDQNAgent.min_replay_history = 20000  # agent steps
+JaxDQNAgent.update_period = 4
+JaxDQNAgent.target_update_period = 8000  # agent steps (every 100 updates)
+JaxDQNAgent.epsilon_train = 0.01
+JaxDQNAgent.epsilon_eval = 0.001
+JaxDQNAgent.epsilon_decay_period = 50000  # agent steps
+JaxDQNAgent.loss_type = 'huber'
+# Note: We are using the Adam optimizer by default for JaxDQN, which differs
+#       from the original NatureDQN and the dopamine TensorFlow version. In
+#       the experiments we have ran, we have found that using Adam yields
+#       improved training performance.
+JaxDQNAgent.optimizer = 'adam'
+create_optimizer.learning_rate = 1e-5
+create_optimizer.eps = 1.5e-4
+
+PersistentDQNAgent.num_updates_per_persistent_step = 1
+PretrainedDQNAgent.teacher_data_ratio = 0.0
+PersistentDQNAgent.data_augmentation = False
+PretrainedDQNAgent.cql_coefficient = 1.0
+PretrainedDQNAgent.distill_temperature = 0.1
+TeacherDQNAgent.load_replay = True
+TeacherDQNAgent.update_horizon = 1
+
+PersistentRunner.num_persistence_iterations = 10
+PersistentRunner.num_persistence_steps = 100000 # 100k grad updates
+PersistentRunner.teacher_steps = 0 # Use last 1M transitions saved points.
+create_persistence_optimizer.learning_rate = 0.0001
+create_persistence_optimizer.eps = 0.00015
+
+atari_lib.create_atari_environment.game_name = 'Pong'
+# Sticky actions with probability 0.25, as suggested by (Machado et al., 2017).
+atari_lib.create_atari_environment.sticky_actions = True
+create_runner.schedule = 'continuous_train'
+create_agent.agent_name = 'jax_dqn'
+create_agent.debug_mode = True
+Runner.num_iterations = 10
+Runner.training_steps = 250000  # agent steps
+Runner.evaluation_steps = 125000  # agent steps
+Runner.max_steps_per_episode = 27000  # agent steps
+
+OutOfGraphReplayBuffer.replay_capacity = 1000000
+OutOfGraphReplayBuffer.batch_size = 32
+OutOfGraphPrioritizedReplayBuffer.replay_capacity = 1000000
+OutOfGraphPrioritizedReplayBuffer.batch_size = 32
