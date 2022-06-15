@@ -23,6 +23,7 @@ from absl import logging
 from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import iteration_statistics
 from dopamine.discrete_domains import run_experiment
+from dopamine.metrics import statistics_instance
 import gin
 import numpy as onp
 from reincarnating_rl import atari_scores
@@ -37,16 +38,18 @@ def get_all_checkpoint_numbers(base_directory,
 
   sentinel = 'sentinel_{}_complete.*'.format(sentinel_file_identifier)
   glob = os.path.join(base_directory, sentinel)
+
   def extract_iteration(x):
     return int(x[x.rfind('.') + 1:])
+
   try:
     checkpoint_files = tf.io.gfile.glob(glob)
   except tf.errors.NotFoundError:
     logging.info('Could not find any checkpoint file')
     return [-1]
   try:
-    iterations = sorted(
-        [extract_iteration(x) for x in checkpoint_files], reverse=True)
+    iterations = sorted([extract_iteration(x) for x in checkpoint_files],
+                        reverse=True)
     return iterations
   except ValueError:
     logging.info('Could not extract any checkpoint versions')
@@ -174,8 +177,9 @@ class PersistentRunner(run_experiment.Runner):
         try:
           agent.reload_replay_buffer(self._teacher_checkpoint_dir,
                                      checkpoint_number)
-          logging.info('Reloaded %s agent replay corresponding to checkpoint'
-                       ' %d', agent.__class__.__name__, checkpoint_number)
+          logging.info(
+              'Reloaded %s agent replay corresponding to checkpoint'
+              ' %d', agent.__class__.__name__, checkpoint_number)
         except tf.errors.NotFoundError:
           replay_dir = os.path.join(
               os.path.dirname(self._teacher_checkpoint_dir), 'replay_logs')
@@ -189,22 +193,21 @@ class PersistentRunner(run_experiment.Runner):
     statistics = iteration_statistics.IterationStatistics()
     logging.info('Starting teacher evaluation at iteration 0.')
     self._set_teacher_as_agent()
-    num_episodes_eval, self._teacher_score = self._run_eval_phase(
-        statistics)
+    num_episodes_eval, self._teacher_score = self._run_eval_phase(statistics)
     self._reset_agent()
-    self._save_teacher_tensorboard_summaries(
-        num_episodes_eval, self._teacher_score)
+    self._save_teacher_tensorboard_summaries(num_episodes_eval,
+                                             self._teacher_score)
     return statistics.data_lists
 
-  def _save_teacher_tensorboard_summaries(
-      self, num_episodes_eval, average_reward_eval):
+  def _save_teacher_tensorboard_summaries(self, num_episodes_eval,
+                                          average_reward_eval):
     """Save teacher statistics as tensorboard summaries."""
 
     if self._sess is None:
       with self._summary_writer.as_default():
         tf.summary.scalar('Eval/Teacher/NumEpisodes', num_episodes_eval, step=0)
-        tf.summary.scalar('Eval/Teacher/AverageReturns', average_reward_eval,
-                          step=0)
+        tf.summary.scalar(
+            'Eval/Teacher/AverageReturns', average_reward_eval, step=0)
       self._summary_writer.flush()
     else:
       summary = tf.compat.v1.Summary(value=[
@@ -215,6 +218,13 @@ class PersistentRunner(run_experiment.Runner):
               simple_value=average_reward_eval)
       ])
       self._summary_writer.add_summary(summary, 0)  # Iteration 0
+      if self._has_collector_dispatcher:
+        self._collector_dispatcher.write([
+            statistics_instance.StatisticsInstance('Eval/Teacher/NumEpisodes',
+                                                   num_episodes_eval, 0),
+            statistics_instance.StatisticsInstance(
+                'Eval/Teacher/AverageReturns', average_reward_eval, 0)
+        ])
 
   def _record_score(self, iteration, statistics):
     # Performance of agent as a fraction of teacher performance.
@@ -231,6 +241,12 @@ class PersistentRunner(run_experiment.Runner):
               tag='Eval/Normalized_Score', simple_value=self.normalized_score),
       ])
       self._summary_writer.add_summary(summary, iteration)
+      if self._has_collector_dispatcher:
+        self._collector_dispatcher.write([
+            statistics_instance.StatisticsInstance('Eval/Normalized_Score',
+                                                   self.normalized_score,
+                                                   iteration)
+        ])
 
   def _run_one_iteration(self, iteration):
     statistics = super()._run_one_iteration(iteration)
@@ -259,10 +275,15 @@ class PersistentRunner(run_experiment.Runner):
         self._training_steps = original_training_steps
         logging.info('Beginning training at iteration %d', iteration)
       statistics = self._run_one_iteration(iteration)
+      if self._has_collector_dispatcher:
+        self._collector_dispatcher.flush()
       self._agent.record_score(self.normalized_score)
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
-    self._summary_writer.flush()
+    if self._summary_writer is not None:
+      self._summary_writer.flush()
+    if self._has_collector_dispatcher:
+      self._collector_dispatcher.close()
 
 
 @gin.configurable
@@ -333,8 +354,8 @@ class OfflinePretrainingRunner(PersistentRunner):
         self._agent.set_phase(persistence=True)
         if iteration == 0:
           self._training_steps = self.teacher_steps
-          logging.info(
-              'Data collection iteration 0: Steps %d', self.teacher_steps)
+          logging.info('Data collection iteration 0: Steps %d',
+                       self.teacher_steps)
           if self.teacher_steps <= 0:
             continue
         else:
@@ -349,7 +370,11 @@ class OfflinePretrainingRunner(PersistentRunner):
         logging.info('Beginning training at iteration %d', iteration)
         self._training_steps = original_training_steps
       statistics = self._run_one_iteration(iteration)
+      if self._has_collector_dispatcher:
+        self._collector_dispatcher.flush()
       self._agent.record_score(self.normalized_score)
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
     self._summary_writer.flush()
+    if self._has_collector_dispatcher:
+      self._collector_dispatcher.close()
