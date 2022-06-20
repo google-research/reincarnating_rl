@@ -6,8 +6,8 @@ import dopamine.discrete_domains.run_experiment
 import dopamine.jax.agents.dqn.dqn_agent
 import dopamine.replay_memory.circular_replay_buffer
 import dopamine.replay_memory.prioritized_replay_buffer
-import reincarnating_rl.persistent_dqn_agent
-import reincarnating_rl.lols_dqn_agent
+import reincarnating_rl.reincarnation_dqn_agent
+import reincarnating_rl.jsrl_dqn_agent
 import reincarnating_rl.run_experiment
 
 JaxDQNAgent.gamma = 0.99
@@ -23,13 +23,13 @@ JaxDQNAgent.optimizer = 'adam'
 create_optimizer.learning_rate = 6.25e-5
 create_optimizer.eps = 1.5e-4
 
-PersistentDQNAgent.num_updates_per_persistent_step = 1
-PersistentRunner.num_persistence_iterations = 0
-PersistentRunner.teacher_steps = 0
-LOLSDQNAgent.roll_out_decay_period = 2500000
-LOLSDQNAgent.max_roll_in_steps = 100
-LOLSDQNAgent.roll_in_guide = False
-LOLSDQNAgent.roll_out_guide_prob = 1.0
+ReincarnationDQNAgent.num_updates_per_persistent_step = 1
+RunnerWithTeacher.num_pretraining_iterations = 0
+RunnerWithTeacher.teacher_steps = 0
+JSRLAgent.roll_out_decay_period = 2500000
+JSRLAgent.max_roll_in_steps = 100
+JSRLAgent.roll_in_guide = False
+JSRLAgent.roll_out_guide_prob = 1.0
 
 
 atari_lib.create_atari_environment.game_name = 'Pong'

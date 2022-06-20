@@ -6,7 +6,7 @@ import dopamine.discrete_domains.gym_lib
 import dopamine.discrete_domains.run_experiment
 import dopamine.replay_memory.prioritized_replay_buffer
 import reincarnating_rl.persistent_rainbow_agent
-import reincarnating_rl.distillation_rainbow_agent
+import reincarnating_rl.qdagger_rainbow_agent
 import reincarnating_rl.teacher_dqn_agent
 import reincarnating_rl.run_experiment
 
@@ -35,15 +35,15 @@ create_linear_schedule.initial_lr = 1e-4 # Used for offline training.
 create_linear_schedule.final_lr = 1e-5 # Used for online-fine tuning
 create_optimizer.eps = 0.00015
 
-PersistentRunner.num_persistence_iterations = 10
-PersistentRunner.num_persistence_steps = 100000 # 100k grad updates
-PersistentRunner.teacher_steps = 0 # Use last 1M transitions saved points.
+RunnerWithTeacher.num_pretraining_iterations = 10
+RunnerWithTeacher.num_pretraining_steps = 100000 # 100k grad updates
+RunnerWithTeacher.teacher_steps = 0 # Use last 1M transitions saved points.
 
-PersistentRainbowAgent.num_updates_per_persistent_step = 1
-PersistentRainbowAgent.data_augmentation = True
-DistillationRainbowAgent.distill_temperature = 0.1
-DistillationRainbowAgent.distill_loss_coefficient = 3.0
-DistillationRainbowAgent.distill_decay_period = 2500000
+ReincarnationRainbowAgent.num_updates_per_persistent_step = 1
+ReincarnationRainbowAgent.data_augmentation = True
+QDaggerRainbowAgent.distill_temperature = 0.1
+QDaggerRainbowAgent.distill_loss_coefficient = 3.0
+QDaggerRainbowAgent.distill_decay_period = 2500000
 TeacherDQNAgent.load_replay = True
 TeacherDQNAgent.update_horizon = 10  # Same as DrQ
 

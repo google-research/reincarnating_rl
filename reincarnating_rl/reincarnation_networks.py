@@ -24,31 +24,12 @@ from flax import linen as nn
 import gin
 import jax
 import jax.numpy as jnp
-import ml_collections
 import numpy as onp
-from reincarnating_rl import impala_networks
 
-
-NetworkType = collections.namedtuple('dqn_network', ['q_values'])
+NetworkWithRepresentation = collections.namedtuple(
+    'network', ['q_values', 'representation'])
 FullRainbowNetwork = networks.FullRainbowNetwork
 ImplicitQuantileNetwork = networks.ImplicitQuantileNetwork
-
-
-def get_atari_b14_config():
-  """Returns the ViT-B/16 configuration except using patch size of 14x14."""
-  config = ml_collections.ConfigDict()
-  config.name = 'ViT-B_14'
-  config.patches = ml_collections.ConfigDict({'size': (14, 14)})
-  config.hidden_size = 768
-  config.transformer = ml_collections.ConfigDict()
-  config.transformer.mlp_dim = 3072
-  config.transformer.num_heads = 12
-  config.transformer.num_layers = 12
-  config.transformer.attention_dropout_rate = 0.0
-  config.transformer.dropout_rate = 0.0
-  config.classifier = 'token'
-  config.representation_size = None
-  return config
 
 
 def preprocess_atari_inputs(x):
@@ -56,10 +37,9 @@ def preprocess_atari_inputs(x):
   return x.astype(jnp.float32) / 255.
 
 
-### DQN Networks ###
 @gin.configurable
-class NatureResidualDQNNetwork(nn.Module):
-  """CNN used to compute the agent's Q-values and residual weights."""
+class JAXDQNNetworkWithRepresentations(nn.Module):
+  """The convolutional network used to compute the agent's Q-values."""
   num_actions: int
   inputs_preprocessed: bool = False
 
@@ -68,26 +48,73 @@ class NatureResidualDQNNetwork(nn.Module):
     initializer = nn.initializers.xavier_uniform()
     if not self.inputs_preprocessed:
       x = preprocess_atari_inputs(x)
-    x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4),
-                kernel_init=initializer)(x)
+    x = nn.Conv(
+        features=32,
+        kernel_size=(8, 8),
+        strides=(4, 4),
+        kernel_init=initializer)(
+            x)
     x = nn.relu(x)
-    x = nn.Conv(features=64, kernel_size=(4, 4), strides=(2, 2),
-                kernel_init=initializer)(x)
+    x = nn.Conv(
+        features=64,
+        kernel_size=(4, 4),
+        strides=(2, 2),
+        kernel_init=initializer)(
+            x)
     x = nn.relu(x)
-    x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
-                kernel_init=initializer)(x)
+    x = nn.Conv(
+        features=64,
+        kernel_size=(3, 3),
+        strides=(1, 1),
+        kernel_init=initializer)(
+            x)
     x = nn.relu(x)
-    x = x.reshape((-1))  # flatten
+    x = x.reshape(-1)  # flatten
     x = nn.Dense(features=512, kernel_init=initializer)(x)
-    # Zero initialization of residual values -- don't corrupt initial teacher-Q
-    # values with randomly initialized Q-values.
-    alpha = self.param('alpha', nn.initializers.zeros, self.num_actions)
-    x = nn.relu(x)
-    q_values = nn.Dense(features=self.num_actions,
-                        kernel_init=initializer)(x)
-    return NetworkType(q_values * alpha)
+    representation = nn.relu(x)  # Use penultimate layer as representation
+    q_values = nn.Dense(
+        features=self.num_actions, kernel_init=initializer)(
+            representation)
+    return NetworkWithRepresentation(q_values, representation)
 
 
+@gin.configurable
+class Stack(nn.Module):
+  """Stack of pooling and convolutional blocks with residual connections."""
+  num_ch: int
+  num_blocks: int
+  use_max_pooling: bool = True
+
+  @nn.compact
+  def __call__(self, x):
+    initializer = nn.initializers.xavier_uniform()
+    conv_out = nn.Conv(
+        features=self.num_ch,
+        kernel_size=(3, 3),
+        strides=1,
+        kernel_init=initializer,
+        padding='SAME')(
+            x)
+    if self.use_max_pooling:
+      conv_out = nn.max_pool(
+          conv_out, window_shape=(3, 3), padding='SAME', strides=(2, 2))
+
+    for _ in range(self.num_blocks):
+      block_input = conv_out
+      conv_out = nn.relu(conv_out)
+      conv_out = nn.Conv(
+          features=self.num_ch, kernel_size=(3, 3), strides=1, padding='SAME')(
+              conv_out)
+      conv_out = nn.relu(conv_out)
+      conv_out = nn.Conv(
+          features=self.num_ch, kernel_size=(3, 3), strides=1, padding='SAME')(
+              conv_out)
+      conv_out += block_input
+
+    return conv_out
+
+
+### Impala Networks ###
 @gin.configurable
 class ImpalaEncoder(nn.Module):
   """Impala Network which also outputs penultimate representation layers."""
@@ -100,12 +127,37 @@ class ImpalaEncoder(nn.Module):
     conv_out = x
 
     for stack_size in self.stack_sizes:
-      conv_out = impala_networks.Stack(
+      conv_out = Stack(
           num_ch=stack_size * self.nn_scale, num_blocks=self.num_blocks)(
               conv_out)
 
     conv_out = nn.relu(conv_out)
     return conv_out
+
+
+@gin.configurable
+class ImpalaNetworkWithRepresentations(nn.Module):
+  """Impala Network which also outputs penultimate representation layers."""
+  num_actions: int
+  inputs_preprocessed: bool = False
+
+  def setup(self):
+    self.encoder = ImpalaEncoder()
+
+  @nn.compact
+  def __call__(self, x):
+    initializer = nn.initializers.xavier_uniform()
+    if not self.inputs_preprocessed:
+      x = preprocess_atari_inputs(x)
+    conv_out = self.encoder(x)
+    conv_out = conv_out.reshape(-1)
+
+    conv_out = nn.Dense(features=512, kernel_init=initializer)(conv_out)
+    representation = nn.relu(conv_out)
+    q_values = nn.Dense(
+        features=self.num_actions, kernel_init=initializer)(
+            representation)
+    return NetworkWithRepresentation(q_values, representation)
 
 
 @gin.configurable
@@ -176,9 +228,7 @@ class ImpalaImplicitQuantileNetwork(nn.Module):
   @nn.compact
   def __call__(self, x, num_quantiles, rng):
     initializer = nn.initializers.variance_scaling(
-        scale=1.0 / jnp.sqrt(3.0),
-        mode='fan_in',
-        distribution='uniform')
+        scale=1.0 / jnp.sqrt(3.0), mode='fan_in', distribution='uniform')
 
     if not self.inputs_preprocessed:
       x = preprocess_atari_inputs(x)
@@ -191,16 +241,17 @@ class ImpalaImplicitQuantileNetwork(nn.Module):
     quantiles = jax.random.uniform(rng, shape=quantiles_shape)
     quantile_net = jnp.tile(quantiles, [1, self.quantile_embedding_dim])
     quantile_net = (
-        jnp.arange(1, self.quantile_embedding_dim + 1, 1).astype(jnp.float32)
-        * onp.pi
-        * quantile_net)
+        jnp.arange(1, self.quantile_embedding_dim + 1, 1).astype(jnp.float32) *
+        onp.pi * quantile_net)
     quantile_net = jnp.cos(quantile_net)
-    quantile_net = nn.Dense(features=state_vector_length,
-                            kernel_init=initializer)(quantile_net)
+    quantile_net = nn.Dense(
+        features=state_vector_length, kernel_init=initializer)(
+            quantile_net)
     quantile_net = nn.relu(quantile_net)
     x = state_net_tiled * quantile_net
     x = nn.Dense(features=512, kernel_init=initializer)(x)
     x = nn.relu(x)
-    quantile_values = nn.Dense(features=self.num_actions,
-                               kernel_init=initializer)(x)
+    quantile_values = nn.Dense(
+        features=self.num_actions, kernel_init=initializer)(
+            x)
     return atari_lib.ImplicitQuantileNetworkType(quantile_values, quantiles)

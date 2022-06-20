@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PersistentDQNAgent that uses distillation for persistence."""
+"""DQN agent that uses DQfD for reincarnation."""
 
 import functools
 
@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import optax
 from reincarnating_rl import loss_helpers
-from reincarnating_rl import persistent_dqn_agent
+from reincarnating_rl import reincarnation_dqn_agent
 import tensorflow as tf
 
 DistillType = loss_helpers.DistillType
@@ -32,9 +32,9 @@ DistillType = loss_helpers.DistillType
 @functools.partial(
     jax.jit,
     static_argnames=('network_def', 'optimizer', 'cumulative_gamma',
-                     'loss_type', 'dr3_coefficient', 'distill_loss_coefficient',
+                     'loss_type', 'distill_loss_coefficient',
                      'distill_temperature', 'distill_best_action_only',
-                     'distill_type', 'use_vision_transformer', 'use_dr3',
+                     'distill_type',
                      'use_margin_loss', 'dqfd_margin',
                      'use_teacher_actions'))
 def train_fn(network_def,
@@ -51,20 +51,15 @@ def train_fn(network_def,
              loss_decay_multiplier,
              cumulative_gamma,
              loss_type='huber',
-             dr3_coefficient=0.0,
-             use_dr3=False,
              margin_coefficient=0.0,
              use_margin_loss=True,
              margin=0.8,
              dqfd_margin=True,
-             use_teacher_actions=False,
-             use_vision_transformer=False):
+             use_teacher_actions=False):
   """Run the training step."""
 
   def loss_fn(params, target):
     def q_online(state):
-      if use_vision_transformer:
-        return network_def.apply(params, state, train=True)
       return network_def.apply(params, state)
 
     vmapped_q_online = jax.vmap(q_online)
@@ -87,20 +82,9 @@ def train_fn(network_def,
                  max_q) = loss_helpers.q_learning_loss(q_values, target,
                                                        actions, loss_type)
 
-    # Compute DR3 loss
     regularization_loss = margin_coefficient * margin_loss
-    if not use_vision_transformer and use_dr3:
-      state_representations = jnp.squeeze(model_output.representation)
-      next_state_output = vmapped_q_online(next_states)
-      next_state_representations = jnp.squeeze(next_state_output.representation)
-      dr3_loss = loss_helpers.compute_dr3_loss(state_representations,
-                                               next_state_representations)
-      regularization_loss += dr3_coefficient * dr3_loss
-    else:
-      dr3_loss = 0.0
     overall_loss = train_loss + loss_decay_multiplier * regularization_loss
-    return overall_loss, (train_loss, margin_loss, dr3_loss, avg_q, action_gap,
-                          max_q)
+    return overall_loss, (train_loss, margin_loss, avg_q, action_gap, max_q)
 
   def q_target(state):
     return network_def.apply(target_params, state)
@@ -120,13 +104,12 @@ def train_fn(network_def,
 
 
 @gin.configurable
-class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
+class DQfDAgent(reincarnation_dqn_agent.ReincarnationDQNAgent):
   """Compact implementation of an agent that is reloaded using another Q-agent."""
 
   def __init__(self,
                num_actions,
                summary_writer=None,
-               dr3_coefficient=0.0,
                margin=0.8,
                margin_coefficient=1.,
                dqfd_margin=False,
@@ -140,11 +123,9 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
     logging.info('\t dqfd_margin: %s', dqfd_margin)
     logging.info('\t margin_coefficient: %d', margin_coefficient)
     logging.info('\t margin: %.4f', margin)
-    logging.info('\t dr3_coefficient: %.4f', dr3_coefficient)
     super().__init__(num_actions, summary_writer=summary_writer, seed=seed)
     # No. of steps within which to decay distillation loss coefficient.
     self.online_training_steps = 0
-    self.dr3_coefficient = dr3_coefficient
     self.margin_coefficient = margin_coefficient
     self.dqfd_margin = dqfd_margin
     self.margin = margin
@@ -153,7 +134,7 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
     self.use_teacher_actions = use_teacher_actions
 
   def set_phase(self, persistence=False):
-    self._persistent_phase = persistence
+    self._reincarnation_phase = persistence
     if not persistence:
       self._sync_weights()  # Sync online and target network before training.
 
@@ -161,7 +142,7 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
     super()._build_networks_and_optimizer()
     self.loss_decay = 1.0
     self.learning_rate_fn = loss_helpers.create_linear_schedule()
-    self.optimizer = loss_helpers.create_persistence_optimizer(
+    self.optimizer = loss_helpers.create_pretraining_optimizer(
         self._optimizer_name, inject_hparams=True)
     self.optimizer_state = self.optimizer.init(self.online_params)
     self.optimizer_state.hyperparams['learning_rate'] = self.learning_rate_fn(
@@ -172,7 +153,6 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
       if self.training_steps % self.update_period == 0:
         self._sample_from_replay_buffer()
         self._distillation_step(
-            dr3_coefficient=0.0,
             margin_coefficient=self.margin_coefficient*self.loss_decay,
             cumulative_gamma=self.cumulative_gamma)
         if self.training_steps % self.target_update_period == 0:
@@ -200,7 +180,6 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
     self._sample_from_teacher_replay_buffer()
     self.replay_elements = self.teacher_replay_elements
     self._distillation_step(
-        dr3_coefficient=self.dr3_coefficient,
         margin_coefficient=self.margin_coefficient,
         cumulative_gamma=self.pretraining_cumulative_gamma)
     if self.training_steps % self.persistence_target_update_period == 0:
@@ -209,17 +188,17 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
   def record_score(self, normalized_score):
     # Decay the coefficients of distillation loss.
     super().record_score(normalized_score)
-    if (not self._persistent_phase) and self.loss_decay > 0:
+    if (not self._reincarnation_phase) and self.loss_decay > 0:
       self.loss_decay = max(1.0 - normalized_score, 0.0)
       if (self.decay_period > 0 and
           self.online_training_steps > self.decay_period):
         self.loss_decay = 0
-      # Decay the learning rate based ondistillation loss decay.
+      # Decay the learning rate based on distillation loss decay.
       if self.lr_decay:
         new_lr = self.learning_rate_fn(self.loss_decay)
         self.optimizer_state.hyperparams['learning_rate'] = new_lr
 
-  def _distillation_step(self, dr3_coefficient, margin_coefficient,
+  def _distillation_step(self, margin_coefficient,
                          cumulative_gamma):
     self._rng, rng1, rng2 = jax.random.split(self._rng, num=3)
     raw_states = self.replay_elements['state']
@@ -249,14 +228,11 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
          self.loss_decay,
          cumulative_gamma,
          self._loss_type,
-         dr3_coefficient=dr3_coefficient,
-         use_dr3=dr3_coefficient > 0,
          use_margin_loss=margin_coefficient > 0,
          margin=self.margin,
          dqfd_margin=self.dqfd_margin,
          use_teacher_actions=self.use_teacher_actions,
-         margin_coefficient=margin_coefficient,
-         use_vision_transformer=self.use_vision_transformer)
+         margin_coefficient=margin_coefficient)
 
     avg_q, action_gap, max_q = individual_losses[-3:]
     if self.training_steps % self.summary_writing_frequency == 0:
@@ -265,8 +241,6 @@ class MarginDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
           tf.summary.scalar('Train/HuberLoss', individual_losses[0],
                             step=self.training_steps)
           tf.summary.scalar('Train/MarginLoss', individual_losses[1],
-                            step=self.training_steps)
-          tf.summary.scalar('Train/DR3Loss', individual_losses[2],
                             step=self.training_steps)
           tf.summary.scalar('Train/OverallLoss', overall_loss,
                             step=self.training_steps)

@@ -20,7 +20,7 @@ from absl import logging
 from dopamine.labs.atari_100k import atari_100k_rainbow_agent as augmented_rainbow
 from dopamine.replay_memory import prioritized_replay_buffer
 import gin
-from reincarnating_rl import persistence_networks
+from reincarnating_rl import reincarnation_networks
 
 
 PRIORITIZED_BUFFERS = [
@@ -29,7 +29,7 @@ PRIORITIZED_BUFFERS = [
 
 
 @gin.configurable
-class PersistentRainbowAgent(augmented_rainbow.Atari100kRainbowAgent):
+class ReincarnationRainbowAgent(augmented_rainbow.Atari100kRainbowAgent):
   """Compact implementation of an agent that is reloaded using another Q-agent."""
 
   def __init__(self,
@@ -37,11 +37,11 @@ class PersistentRainbowAgent(augmented_rainbow.Atari100kRainbowAgent):
                num_updates_per_persistent_step=1,
                data_augmentation=False,
                summary_writer=None,
-               network=persistence_networks.FullRainbowNetwork,
+               network=reincarnation_networks.FullRainbowNetwork,
                seed=None):
 
     logging.info(
-        'Creating PersistentRainbowAgent agent with the following parameters:')
+        'Creating ReincarnationRainbowAgent agent with the following parameters:')
     logging.info('\t num_updates_per_persistent_step: %d',
                  num_updates_per_persistent_step)
     logging.info('\t data_augmentation: %s', data_augmentation)

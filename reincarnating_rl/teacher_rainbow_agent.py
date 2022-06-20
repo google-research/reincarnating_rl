@@ -62,7 +62,7 @@ class TeacherRainbowAgent(augmented_rainbow_agent.Atari100kRainbowAgent):
     logging.info('Creating a TeacherRainbowAgent with following params: ')
     logging.info('\t load_replay: %s', load_replay)
     logging.info('\t reload_optimizer: %s', reload_optimizer)
-    self.load_replay = load_replay  # Used in PersistentRunner.
+    self.load_replay = load_replay  # Used in RunnerWithTeacher.
     self._reload_optimizer = reload_optimizer
     super().__init__(
         num_actions,

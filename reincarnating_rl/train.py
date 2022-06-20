@@ -30,11 +30,11 @@ from dopamine.discrete_domains import run_experiment as base_run_experiment
 from dopamine.discrete_domains import train as base_train
 from jax.config import config
 import numpy as np
-from reincarnating_rl import distillation_dqn_agent
-from reincarnating_rl import distillation_rainbow_agent
-from reincarnating_rl import lols_dqn_agent
-from reincarnating_rl import margin_dqn_agent
+from reincarnating_rl import dqfd_dqn_agent
+from reincarnating_rl import jsrl_dqn_agent
 from reincarnating_rl import pretrained_dqn_agent
+from reincarnating_rl import qdagger_dqn_agent
+from reincarnating_rl import qdagger_rainbow_agent
 from reincarnating_rl import reloaded_dqn_agent
 from reincarnating_rl import run_experiment
 from reincarnating_rl import teacher_dqn_agent
@@ -44,25 +44,23 @@ import tensorflow as tf
 
 FLAGS = flags.FLAGS
 AGENTS = [
-    'distillation_dqn',
+    'qdagger_dqn',
     'reloaded_dqn',
     'pretrained_dqn',
-    'lols_dqn',
-    'distillation_rainbow',
-    'pretrained_dopamine_rainbow',
-    'margin_dqn',
+    'jsrl_dqn',
+    'qdagger_rainbow',
+    'dqfd_dqn',
 ]
 TEACHER_AGENTS = ['dqn']
 PRETRAINING_AGENTS = [
     'pretrained_dqn',
-    'distillation_dqn',
-    'distillation_rainbow',
-    'pretrained_dopamine_rainbow',
-    'margin_dqn',
+    'qdagger_dqn',
+    'qdagger_rainbow',
+    'dqfd_dqn',
 ]
 
 # flags are defined when importing run_xm_preprocessing
-flags.DEFINE_enum('agent', 'distillation_dqn', AGENTS, 'Name of the agent.')
+flags.DEFINE_enum('agent', 'qdagger_dqn', AGENTS, 'Name of the agent.')
 flags.DEFINE_boolean('disable_jit', False, 'Whether to use jit or not.')
 flags.DEFINE_enum('teacher_agent', 'dqn', TEACHER_AGENTS, 'Teacher agent name.')
 flags.DEFINE_integer('run_number', 1, 'Run number.')
@@ -86,19 +84,19 @@ def create_agent(
     summary_writer=None):
   """Create persistent agent which pretrains using a teacher agent."""
 
-  if agent == 'distillation_dqn':
-    agent_fn = distillation_dqn_agent.DistillationDQNAgent
-  elif agent == 'distillation_rainbow':
+  if agent == 'qdagger_dqn':
+    agent_fn = qdagger_dqn_agent.QDaggerDQNAgent
+  elif agent == 'qdagger_rainbow':
     # Pass a separate gin config for DrQ/Full Rainbow agent.
-    agent_fn = distillation_rainbow_agent.DistillationRainbowAgent
+    agent_fn = qdagger_rainbow_agent.QDaggerRainbowAgent
   elif agent == 'reloaded_dqn':
     agent_fn = reloaded_dqn_agent.ReloadedDQNAgent
   elif agent == 'pretrained_dqn':
     agent_fn = pretrained_dqn_agent.PretrainedDQNAgent
-  elif agent == 'lols_dqn':
-    agent_fn = lols_dqn_agent.LOLSDQNAgent
-  elif agent == 'margin_dqn':
-    agent_fn = margin_dqn_agent.MarginDQNAgent
+  elif agent == 'jsrl_dqn':
+    agent_fn = jsrl_dqn_agent.JSRLAgent
+  elif agent == 'dqfd_dqn':
+    agent_fn = dqfd_dqn_agent.DQfDAgent
   else:
     raise ValueError(f'{agent} is not defined.')
 
@@ -143,7 +141,11 @@ def main(unused_argv):
   base_dir = FLAGS.base_dir
   gin_files = FLAGS.gin_files
   gin_bindings = FLAGS.gin_bindings
-  teacher_checkpoint_dir = None
+  if FLAGS.teacher_checkpoint_dir is not None:
+    teacher_checkpoint_dir = os.path.join(FLAGS.teacher_checkpoint_dir,
+                                          'checkpoints')
+  else:
+    teacher_checkpoint_dir = None
   # Add code for setting random seed using the run_number
   set_random_seed(FLAGS.run_number)
   base_run_experiment.load_gin_configs(gin_files, gin_bindings)
@@ -154,9 +156,9 @@ def main(unused_argv):
       create_teacher_agent, teacher_agent=FLAGS.teacher_agent)
 
   if FLAGS.agent in PRETRAINING_AGENTS:
-    runner_fn = run_experiment.OfflinePretrainingRunner
+    runner_fn = run_experiment.ReincarnationRunner
   else:
-    runner_fn = run_experiment.PersistentRunner
+    runner_fn = run_experiment.RunnerWithTeacher
   runner = runner_fn(
       base_dir,
       create_agent_fn,

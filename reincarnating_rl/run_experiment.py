@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Runner for launching persistent experiments."""
+"""Runner for launching reincarnating RL experiments."""
 
 import copy
 import os
@@ -57,7 +57,7 @@ def get_all_checkpoint_numbers(base_directory,
 
 
 @gin.configurable
-class PersistentRunner(run_experiment.Runner):
+class RunnerWithTeacher(run_experiment.Runner):
   """Object that handles running Dopamine experiments for persistence agents."""
 
   def __init__(self,
@@ -65,9 +65,9 @@ class PersistentRunner(run_experiment.Runner):
                create_agent_fn,
                create_teacher_agent_fn,
                teacher_checkpoint_dir,
-               num_persistence_steps=100000,
-               teacher_steps=100000,
-               num_persistence_iterations=1,
+               num_pretraining_steps=100000,
+               teacher_steps=0,
+               num_pretraining_iterations=1,
                teacher_checkpoint_number=None,
                evaluate_teacher=True,
                checkpoint_file_prefix='ckpt',
@@ -80,8 +80,8 @@ class PersistentRunner(run_experiment.Runner):
     logging.info('\t Base directory: %s', base_dir)
     logging.info('\t Teacher checkpoint directory: %s', teacher_checkpoint_dir)
     logging.info('\t Num distillation iterations: %d',
-                 num_persistence_iterations)
-    logging.info('\t num_persistence_steps: %d', num_persistence_steps)
+                 num_pretraining_iterations)
+    logging.info('\t num_pretraining_steps: %d', num_pretraining_steps)
     logging.info('\t teacher_steps: %d', teacher_steps)
     self._teacher_checkpoint_dir = teacher_checkpoint_dir
     self._teacher_agent = create_teacher_agent_fn(
@@ -94,8 +94,8 @@ class PersistentRunner(run_experiment.Runner):
       self._initialize_agent(self._agent, teacher_checkpoint_file_prefix,
                              teacher_checkpoint_number)
     self._agent.set_teacher(self._teacher_agent, teacher_steps)
-    self._num_persistence_iterations = num_persistence_iterations
-    self._num_persistence_steps = num_persistence_steps
+    self._num_pretraining_iterations = num_pretraining_iterations
+    self._num_pretraining_steps = num_pretraining_steps
     self.teacher_steps = teacher_steps
     self._evaluate_teacher = evaluate_teacher
     # Score of a random agent.
@@ -251,6 +251,8 @@ class PersistentRunner(run_experiment.Runner):
   def _run_one_iteration(self, iteration):
     statistics = super()._run_one_iteration(iteration)
     self._record_score(iteration, statistics)
+    if self._has_collector_dispatcher:
+      self._collector_dispatcher.flush()
     return statistics
 
   def run_experiment(self):
@@ -258,7 +260,7 @@ class PersistentRunner(run_experiment.Runner):
     if self._evaluate_teacher:
       self._run_teacher_evaluation()
 
-    total_iterations = self._num_iterations + self._num_persistence_iterations
+    total_iterations = self._num_iterations + self._num_pretraining_iterations
     if total_iterations <= self._start_iteration:
       logging.warning('num_iterations (%d) < start_iteration(%d)',
                       self._num_iterations, self._start_iteration)
@@ -266,17 +268,15 @@ class PersistentRunner(run_experiment.Runner):
 
     original_training_steps = self._training_steps
     for iteration in range(self._start_iteration, total_iterations):
-      if iteration < self._num_persistence_iterations:
+      if iteration < self._num_pretraining_iterations:
         self._agent.set_phase(persistence=True)
-        self._training_steps = self._num_persistence_steps
+        self._training_steps = self._num_pretraining_steps
         logging.info('Persistence iteration %d', iteration)
-      elif iteration == self._num_persistence_iterations:
+      elif iteration == self._num_pretraining_iterations:
         self._agent.set_phase(persistence=False)
         self._training_steps = original_training_steps
         logging.info('Beginning training at iteration %d', iteration)
       statistics = self._run_one_iteration(iteration)
-      if self._has_collector_dispatcher:
-        self._collector_dispatcher.flush()
       self._agent.record_score(self.normalized_score)
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
@@ -287,8 +287,8 @@ class PersistentRunner(run_experiment.Runner):
 
 
 @gin.configurable
-class OfflinePretrainingRunner(PersistentRunner):
-  """Persistent Runner for Offline Pretraining."""
+class ReincarnationRunner(RunnerWithTeacher):
+  """Reincarnation Runner with offline pretraining."""
 
   def __init__(self,
                base_dir,
@@ -342,7 +342,7 @@ class OfflinePretrainingRunner(PersistentRunner):
     self._offline_pretraining = False
 
     total_iterations = (
-        self._num_iterations + self._num_persistence_iterations + 1)
+        self._num_iterations + self._num_pretraining_iterations + 1)
     if total_iterations <= self._start_iteration:
       logging.warning('num_iterations (%d) < start_iteration(%d)',
                       self._num_iterations, self._start_iteration)
@@ -350,7 +350,7 @@ class OfflinePretrainingRunner(PersistentRunner):
 
     original_training_steps = self._training_steps
     for iteration in range(self._start_iteration, total_iterations):
-      if iteration < self._num_persistence_iterations + 1:
+      if iteration < self._num_pretraining_iterations + 1:
         self._agent.set_phase(persistence=True)
         if iteration == 0:
           self._training_steps = self.teacher_steps
@@ -360,18 +360,16 @@ class OfflinePretrainingRunner(PersistentRunner):
             continue
         else:
           self._offline_pretraining = True
-          self._training_steps = self._num_persistence_steps
+          self._training_steps = self._num_pretraining_steps
           logging.info('Offline pretraining iteration %d: Steps %d', iteration,
-                       self._num_persistence_steps)
+                       self._num_pretraining_steps)
       else:
-        if iteration == self._num_persistence_iterations + 1:
+        if iteration == self._num_pretraining_iterations + 1:
           self._agent.set_phase(persistence=False)
         self._offline_pretraining = False
         logging.info('Beginning training at iteration %d', iteration)
         self._training_steps = original_training_steps
       statistics = self._run_one_iteration(iteration)
-      if self._has_collector_dispatcher:
-        self._collector_dispatcher.flush()
       self._agent.record_score(self.normalized_score)
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)

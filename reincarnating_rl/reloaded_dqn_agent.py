@@ -23,12 +23,12 @@ from flax import core
 from flax.training import checkpoints
 import gin
 import jax
-from reincarnating_rl import persistent_dqn_agent
+from reincarnating_rl import reincarnation_dqn_agent
 import tensorflow as tf
 
 
 @gin.configurable
-class ReloadedDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
+class ReloadedDQNAgent(reincarnation_dqn_agent.ReincarnationDQNAgent):
   """A variant of DQN that reloads from an existing DQN agent."""
 
   def __init__(

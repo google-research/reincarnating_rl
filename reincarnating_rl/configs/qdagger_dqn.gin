@@ -6,15 +6,14 @@ import dopamine.discrete_domains.run_experiment
 import dopamine.jax.agents.dqn.dqn_agent
 import dopamine.replay_memory.circular_replay_buffer
 import dopamine.replay_memory.prioritized_replay_buffer
-import reincarnating_rl.persistent_dqn_agent
-import reincarnating_rl.pretrained_dqn_agent
-import reincarnating_rl.distillation_dqn_agent
+import reincarnating_rl.reincarnation_dqn_agent
+import reincarnating_rl.qdagger_dqn_agent
 import reincarnating_rl.teacher_dqn_agent
 import reincarnating_rl.run_experiment
-import reincarnating_rl.persistence_networks
+import reincarnating_rl.reincarnation_networks
 
 JaxDQNAgent.gamma = 0.99
-JaxDQNAgent.update_horizon = 1
+JaxDQNAgent.update_horizon = 3
 JaxDQNAgent.min_replay_history = 20000  # agent steps
 JaxDQNAgent.update_period = 4
 JaxDQNAgent.target_update_period = 8000  # agent steps (every 100 updates)
@@ -31,19 +30,17 @@ create_linear_schedule.initial_lr = 1e-4 # Used for offline training.
 create_linear_schedule.final_lr = 1e-5 # Used for online-fine tuning
 create_optimizer.eps = 0.00015
 
-MarginDQNAgent.margin_coefficient = 1.0
-MarginDQNAgent.margin = 1.0
-MarginDQNAgent.decay_period = 1500000
-MarginDQNAgent.lr_decay = False
-MarginDQNAgent.dqfd_margin = False
-MarginDQNAgent.use_teacher_actions = True
-PersistentDQNAgent.num_updates_per_persistent_step = 1
-PersistentDQNAgent.data_augmentation = False
+QDaggerDQNAgent.distill_loss_coefficient = 3.0
+ReincarnationDQNAgent.num_updates_per_persistent_step = 1
+ReincarnationDQNAgent.data_augmentation = False
 TeacherDQNAgent.load_replay = True
+TeacherDQNAgent.update_horizon = 3
+QDaggerDQNAgent.distill_temperature = 0.1
+QDaggerDQNAgent.distill_decay_period = 1500000
 
-PersistentRunner.num_persistence_iterations = 10
-PersistentRunner.num_persistence_steps = 100000 # 100k grad updates
-PersistentRunner.teacher_steps = 0 # Use last 1M transitions saved points.
+RunnerWithTeacher.num_pretraining_iterations = 10
+RunnerWithTeacher.num_pretraining_steps = 100000 # 100k grad updates
+RunnerWithTeacher.teacher_steps = 0 # Use last 1M transitions saved points.
 
 atari_lib.create_atari_environment.game_name = 'Pong'
 # Sticky actions with probability 0.25, as suggested by (Machado et al., 2017).

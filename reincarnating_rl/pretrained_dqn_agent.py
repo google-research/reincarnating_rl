@@ -24,8 +24,8 @@ import jax
 import jax.numpy as jnp
 import optax
 from reincarnating_rl import loss_helpers
-from reincarnating_rl import persistence_networks  # pylint:disable=unused-import
-from reincarnating_rl import persistent_dqn_agent
+from reincarnating_rl import reincarnation_dqn_agent
+from reincarnating_rl import reincarnation_networks  # pylint:disable=unused-import
 import tensorflow as tf
 
 
@@ -115,7 +115,7 @@ def train(network_def, online_params, target_params, optimizer, optimizer_state,
 
 
 @gin.configurable
-class PretrainedDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
+class PretrainedDQNAgent(reincarnation_dqn_agent.ReincarnationDQNAgent):
   """Uses offline pretraining to kickstart learning."""
 
   def __init__(
@@ -153,7 +153,7 @@ class PretrainedDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
 
   def _build_networks_and_optimizer(self):
     super()._build_networks_and_optimizer()
-    self.pretraining_optimizer = loss_helpers.create_persistence_optimizer(
+    self.pretraining_optimizer = loss_helpers.create_pretraining_optimizer(
         self._optimizer_name, inject_hparams=True)
     self.pretraining_optimizer_state = self.pretraining_optimizer.init(
         self.online_params)

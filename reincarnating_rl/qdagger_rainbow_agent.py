@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Rainbow agent that use persistence via Dagger on offline and online data."""
+"""Rainbow agent that uses QDagger for reincarnation."""
 
 import enum
 import functools
@@ -24,9 +24,9 @@ import gin
 import jax
 import jax.numpy as jnp
 import optax
-import tensorflow as tf
 from reincarnating_rl import loss_helpers
-from reincarnating_rl import persistent_rainbow_agent
+from reincarnating_rl import reincarnation_rainbow_agent
+import tensorflow as tf
 
 
 class MethodType(enum.IntEnum):
@@ -136,7 +136,8 @@ def train_and_distill(
 
 
 @gin.configurable
-class DistillationRainbowAgent(persistent_rainbow_agent.PersistentRainbowAgent):
+class QDaggerRainbowAgent(
+  reincarnation_rainbow_agent.ReincarnationRainbowAgent):
   """Uses offline pretraining to kickstart learning."""
 
   def __init__(
@@ -161,7 +162,7 @@ class DistillationRainbowAgent(persistent_rainbow_agent.PersistentRainbowAgent):
     logging.info('\t distill_best_action_only: %.4f', distill_best_action_only)
     logging.info('\t distill_temperature: %.4f', distill_temperature)
     logging.info('\t method_type: %d', method_type)
-    # No. of steps within which to decay distillation and dr3 loss coefficients.
+    # No. of steps within which to decay distillation loss coefficients.
     self.distill_decay_period = distill_decay_period
     self.distill_loss_coefficient = distill_loss_coefficient
     self.distill_best_action_only = distill_best_action_only
@@ -173,16 +174,16 @@ class DistillationRainbowAgent(persistent_rainbow_agent.PersistentRainbowAgent):
     else:
       self._td_coefficient = 1.0
 
-  def set_phase(self, persistence=False):
-    self._persistent_phase = persistence
-    if not persistence:
+  def set_phase(self, reincarnation=False):
+    self._reincarnation_phase = reincarnation
+    if not reincarnation:
       self._sync_weights()  # Sync online and target network before training.
 
   def _build_networks_and_optimizer(self):
     self._rng, rng = jax.random.split(self._rng)
     self.online_params = self.network_def.init(rng, x=self.state,
                                                support=self._support)
-    self.optimizer = loss_helpers.create_persistence_optimizer(
+    self.optimizer = loss_helpers.create_pretraining_optimizer(
         self._optimizer_name, inject_hparams=True)
     self.optimizer_state = self.optimizer.init(self.online_params)
     self.target_network_params = self.online_params
@@ -197,7 +198,7 @@ class DistillationRainbowAgent(persistent_rainbow_agent.PersistentRainbowAgent):
     super().record_score(normalized_score)
     if self._method_type != MethodType.REINCARNATION:
       return
-    if (not self._persistent_phase) and self.loss_decay > 0:
+    if (not self._reincarnation_phase) and self.loss_decay > 0:
       self.loss_decay = max(1.0 - normalized_score, 0.0)
       if (self.distill_decay_period > 0 and
           self.online_training_steps > self.distill_decay_period):
@@ -206,11 +207,11 @@ class DistillationRainbowAgent(persistent_rainbow_agent.PersistentRainbowAgent):
       self.optimizer_state.hyperparams['learning_rate'] = self.learning_rate_fn(
           self.loss_decay)
 
-  def _persistence_step(self):
+  def _reincarnation_step(self):
     self._sample_from_teacher_replay_buffer()
     self.replay_elements = self.teacher_replay_elements
     self._distillation_step(self.pretraining_cumulative_gamma)
-    if self.training_steps % self.persistence_target_update_period == 0:
+    if self.training_steps % self.reincarnation_target_update_period == 0:
       self._sync_weights()
 
   def _original_train_step(self):
@@ -241,7 +242,7 @@ class DistillationRainbowAgent(persistent_rainbow_agent.PersistentRainbowAgent):
         self.teacher_agent.get_q_values(raw_states))
 
     # Whether to use prioritized replay or not.
-    use_prioritized_replay = ((not self._persistent_phase) and
+    use_prioritized_replay = ((not self._reincarnation_phase) and
                               self._replay_scheme == 'prioritized')
     if use_prioritized_replay:
       probs = self.replay_elements['sampling_probabilities']

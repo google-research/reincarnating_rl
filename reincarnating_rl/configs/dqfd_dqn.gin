@@ -8,8 +8,10 @@ import dopamine.replay_memory.circular_replay_buffer
 import dopamine.replay_memory.prioritized_replay_buffer
 import reincarnating_rl.reincarnation_dqn_agent
 import reincarnating_rl.pretrained_dqn_agent
+import reincarnating_rl.qdagger_dqn_agent
 import reincarnating_rl.teacher_dqn_agent
 import reincarnating_rl.run_experiment
+import reincarnating_rl.reincarnation_networks
 
 JaxDQNAgent.gamma = 0.99
 JaxDQNAgent.update_horizon = 1
@@ -25,29 +27,30 @@ JaxDQNAgent.loss_type = 'huber'
 #       the experiments we have ran, we have found that using Adam yields
 #       improved training performance.
 JaxDQNAgent.optimizer = 'adam'
-create_optimizer.learning_rate = 1e-5
-create_optimizer.eps = 1.5e-4
+create_linear_schedule.initial_lr = 1e-4 # Used for offline training.
+create_linear_schedule.final_lr = 1e-5 # Used for online-fine tuning
+create_optimizer.eps = 0.00015
 
+DQfDAgent.margin_coefficient = 1.0
+DQfDAgent.margin = 1.0
+DQfDAgent.decay_period = 1500000
+DQfDAgent.lr_decay = False
+DQfDAgent.dqfd_margin = False
+DQfDAgent.use_teacher_actions = True
 ReincarnationDQNAgent.num_updates_per_persistent_step = 1
-PretrainedDQNAgent.teacher_data_ratio = 0.0
 ReincarnationDQNAgent.data_augmentation = False
-PretrainedDQNAgent.cql_coefficient = 1.0
-PretrainedDQNAgent.distill_temperature = 0.1
 TeacherDQNAgent.load_replay = True
-TeacherDQNAgent.update_horizon = 1
 
 RunnerWithTeacher.num_pretraining_iterations = 10
 RunnerWithTeacher.num_pretraining_steps = 100000 # 100k grad updates
 RunnerWithTeacher.teacher_steps = 0 # Use last 1M transitions saved points.
-create_pretraining_optimizer.learning_rate = 0.0001
-create_pretraining_optimizer.eps = 0.00015
 
 atari_lib.create_atari_environment.game_name = 'Pong'
 # Sticky actions with probability 0.25, as suggested by (Machado et al., 2017).
 atari_lib.create_atari_environment.sticky_actions = True
 create_runner.schedule = 'continuous_train'
 create_agent.agent_name = 'jax_dqn'
-create_agent.debug_mode = True
+create_agent.debug_mode = False
 Runner.num_iterations = 10
 Runner.training_steps = 250000  # agent steps
 Runner.evaluation_steps = 125000  # agent steps

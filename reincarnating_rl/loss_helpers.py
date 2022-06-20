@@ -34,10 +34,10 @@ class DistillType(enum.IntEnum):
 
 @gin.configurable
 @functools.partial(jax.jit, static_argnums=(0, 2, 3))
-def persistence_linearly_decaying_epsilon(
+def reincarnation_linearly_decaying_epsilon(
     decay_period, step, warmup_steps, epsilon):
   """Returns the current epsilon for the agent's epsilon-greedy policy."""
-  unused_argv = warmup_steps  # Do not use warmup steps for persistence.
+  unused_argv = warmup_steps  # Do not use warmup steps for reincarnation.
   steps_left = decay_period - step
   bonus = (1.0 - epsilon) * steps_left / decay_period
   bonus = jnp.clip(bonus, 0., 1. - epsilon)
@@ -53,7 +53,7 @@ def create_linear_schedule(initial_lr=1e-4, final_lr=1e-5):
 
 
 @gin.configurable
-def create_persistence_optimizer(name='adam',
+def create_pretraining_optimizer(name='adam',
                                  learning_rate=6.25e-5,
                                  beta1=0.9,
                                  beta2=0.999,
@@ -105,48 +105,11 @@ def get_q_values(model, states):
   return model(states).q_values
 
 
-def compute_dr3_loss(state_representations, next_state_representations):
-  """Minimizes dot product between state and next state representations."""
-  dot_products = jnp.einsum(
-      'ij,ij->i', state_representations, next_state_representations)
-  # Minimize |\phi(s) \phi(s')|
-  return jnp.mean(jnp.abs(dot_products))
-
-
 def kl_divergence_with_logits(target_logits, prediction_logits):
   """Implementation of on-policy distillation loss."""
   out = -nn.softmax(target_logits) * (nn.log_softmax(prediction_logits)
                                       - nn.log_softmax(target_logits))
   return jnp.sum(out)
-
-
-def stable_scaled_log_softmax(x, tau, axis=-1):
-  max_x = jnp.amax(x, axis=axis, keepdims=True)
-  y = x - max_x
-  tau_lse = max_x + tau * jnp.log(
-      jnp.sum(jnp.exp(y / tau), axis=axis, keepdims=True))
-  return x - tau_lse
-
-
-def stable_softmax(x, tau, axis=-1):
-  max_x = jnp.amax(x, axis=axis, keepdims=True)
-  y = x - max_x
-  return jax.nn.softmax(y / tau, axis=axis)
-
-
-def get_munchausen_reward(q_target, states, actions, tau, clip_value_min=-1):
-  r"""Use clipped value of [tau x log\pi(a|s)] as additional reward."""
-  target_q_values = get_q_values(q_target, states)
-  replay_log_policy = stable_scaled_log_softmax(
-      target_q_values, tau, axis=1)
-  # replay_next_policy = stable_softmax(  # pi_k+1(s')
-  #     target_next_q_values, tau, axis=1)
-  # replay_next_qt_softmax = jnp.sum(
-  #     (target_next_q_values - replay_next_log_policy) * replay_next_policy,
-  #     axis=1)
-  tau_log_pi_a = jax.vmap(lambda x, y: x[y])(replay_log_policy, actions)
-  # Clip the log-policy.
-  return jnp.clip(tau_log_pi_a, a_min=clip_value_min, a_max=1)
 
 
 def batch_cql_loss(q_values, actions, distill_temperature=1.0):
@@ -158,34 +121,17 @@ def batch_cql_loss(q_values, actions, distill_temperature=1.0):
 def create_cql_loss(network_def,
                     states,
                     actions,
-                    next_states,
-                    cql_coefficient,
-                    dr3_coefficient=0.0,
-                    distill_temperature=1.0,
-                    use_vision_transformer=False):
+                    distill_temperature=1.0):
   """Loss function for training using offline data."""
 
   def loss_fn(params):
     def q_online(state):
-      if use_vision_transformer:
-        return network_def.apply(params, state, train=True)
       return network_def.apply(params, state)
     model_output = jax.vmap(q_online)(states)
     # Compute CQL Loss.
     q_values = jnp.squeeze(model_output.q_values)
     cql_loss = jnp.mean(batch_cql_loss(q_values, actions, distill_temperature))
-
-    if dr3_coefficient is not None:
-      # Compute DR3 loss.
-      representations = jnp.squeeze(model_output.representation)
-      next_states_model_output = jax.vmap(q_online)(next_states)
-      next_state_representations = jnp.squeeze(
-          next_states_model_output.representation)
-      dr3_loss = compute_dr3_loss(representations, next_state_representations)
-      total_loss = dr3_coefficient * dr3_loss + cql_coefficient * cql_loss
-      return total_loss, (cql_loss, dr3_loss)
-    else:
-      return cql_loss
+    return cql_loss
   return loss_fn
 
 

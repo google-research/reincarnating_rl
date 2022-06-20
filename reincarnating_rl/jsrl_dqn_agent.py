@@ -21,7 +21,7 @@ import gin
 import jax
 import numpy as onp
 from reincarnating_rl import loss_helpers
-from reincarnating_rl import persistent_dqn_agent
+from reincarnating_rl import reincarnation_dqn_agent
 import tensorflow as tf
 
 
@@ -36,19 +36,19 @@ def select_roll_out_action(roll_out_guide_prob, roll_out_decay_fn,
 
 
 @gin.configurable
-class LOLSDQNAgent(persistent_dqn_agent.PersistentDQNAgent):
+class JSRLAgent(reincarnation_dqn_agent.ReincarnationDQNAgent):
   """Uses guide policy for rolling in to kickstart learning."""
 
   def __init__(
       self,
       num_actions,
       summary_writer=None,
-      roll_in_guide=False,
-      roll_out_guide_prob=1.0,
-      roll_out_decay_fn=loss_helpers.persistence_linearly_decaying_epsilon,
+      roll_in_guide=True,
+      roll_out_guide_prob=0.0,
+      roll_out_decay_fn=loss_helpers.reincarnation_linearly_decaying_epsilon,
       roll_out_decay_period=250000,
-      decay_roll_in_steps=1.0,
-      max_roll_in_steps=100,
+      decay_roll_in_steps=0.8,
+      max_roll_in_steps=1000,
       seed=None):
     super().__init__(
         num_actions,

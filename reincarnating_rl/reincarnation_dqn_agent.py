@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DQN agent that can be restarted from checkpoint of another Q-learning agent."""
+"""DQN agent that can be restarted from checkpoint of another agent."""
 
 import collections
 import functools
@@ -21,9 +21,8 @@ from dopamine.jax.agents.dqn import dqn_agent
 from dopamine.labs.atari_100k import atari_100k_rainbow_agent as augmented_rainbow
 from dopamine.replay_memory import prioritized_replay_buffer
 import gin
-from reincarnating_rl import impala_networks
 from reincarnating_rl import loss_helpers
-from reincarnating_rl import persistence_networks  # pylint:disable=unused-import
+from reincarnating_rl import reincarnation_networks  # pylint:disable=unused-import
 
 PRIORITIZED_BUFFERS = [
     prioritized_replay_buffer.OutOfGraphPrioritizedReplayBuffer,
@@ -31,15 +30,15 @@ PRIORITIZED_BUFFERS = [
 
 
 @gin.configurable
-class PersistentDQNAgent(dqn_agent.JaxDQNAgent):
-  """Compact implementation of an agent that is reloaded using another Q-agent."""
+class ReincarnationDQNAgent(dqn_agent.JaxDQNAgent):
+  """Compact implementation of an agent that reuses another agent."""
 
   def __init__(
       self,
       num_actions,
-      num_updates_per_persistent_step=1,
-      network=impala_networks.JAXDQNNetworkWithRepresentations,
-      epsilon_fn=loss_helpers.persistence_linearly_decaying_epsilon,
+      num_updates_per_reincarnation_step=1,
+      network=reincarnation_networks.JAXDQNNetworkWithRepresentations,
+      epsilon_fn=loss_helpers.reincarnation_linearly_decaying_epsilon,
       data_augmentation=False,
       summary_writer=None,
       summary_writing_frequency=2500,
@@ -49,8 +48,8 @@ class PersistentDQNAgent(dqn_agent.JaxDQNAgent):
 
     Args:
       num_actions: int, number of actions the agent can take at any state.
-      num_updates_per_persistent_step: int, Number of gradient updates every
-        persistence RL step.
+      num_updates_per_reincarnation_step: int, Number of gradient updates every
+        reincarnation RL step.
       network: Jax network to use for training.
       epsilon_fn: function expecting 4 parameters:
         (decay_period, step, warmup_steps, epsilon). This function should return
@@ -68,8 +67,8 @@ class PersistentDQNAgent(dqn_agent.JaxDQNAgent):
 
     logging.info('Creating %s agent with the following parameters:',
                  self.__class__.__name__)
-    logging.info('\t num_updates_per_persistent_step: %d',
-                 num_updates_per_persistent_step)
+    logging.info('\t num_updates_per_reincarnation_step: %d',
+                 num_updates_per_reincarnation_step)
     logging.info('\t data_augmentation: %s', data_augmentation)
     logging.info('\t network: %s', network)
 
@@ -82,18 +81,15 @@ class PersistentDQNAgent(dqn_agent.JaxDQNAgent):
         summary_writing_frequency=summary_writing_frequency,
         seed=seed)
     self.teacher_agent = None  # To be set explicitly by `set_teacher`
-    self._num_updates_per_persistent_step = num_updates_per_persistent_step
-    self._persistent_phase = False
+    self._num_updates_per_reincarnation_step = num_updates_per_reincarnation_step
+    self._reincarnation_phase = False
     self.teacher_steps = None
     self.data_augmentation = data_augmentation
-    self.persistence_target_update_period = (
+    self.reincarnation_target_update_period = (
         self.target_update_period // self.update_period)
     self._teacher_replay = None
     self.train_preprocess_fn = functools.partial(
         preprocess_fn, data_augmentation=data_augmentation)
-    # If using Vision Transformer model, then need to pass explicit train flag.
-    self.use_vision_transformer = (
-        self.network_def.__class__.__name__ == 'AtariVisionTransformer')
 
   def record_score(self, normalized_score):
     # Performance of agent as a fraction of teacher performance
@@ -127,20 +123,20 @@ class PersistentDQNAgent(dqn_agent.JaxDQNAgent):
     for element, element_type in zip(samples, types):
       self.teacher_replay_elements[element_type.name] = element
 
-  def set_phase(self, persistence: bool = False):
-    # Training was in persistent phase but switching to non-persistent phase.
-    if self._persistent_phase and not persistence:
+  def set_phase(self, reincarnation: bool = False):
+    # Training was in reincarnation phase but switching to regular online phase.
+    if self._reincarnation_phase and not reincarnation:
       self._sync_weights()  # Sync online and target network before training.
-    self._persistent_phase = persistence
+    self._reincarnation_phase = reincarnation
 
   def _train_step(self):
     """Runs a single training step."""
-    if self._persistent_phase:
+    if self._reincarnation_phase:
       # Only start updating if replay buffer contains a sufficient number of
       # data points. Multiple updates every step.
       if self._teacher_replay.add_count > self.teacher_steps:
-        for _ in range(self._num_updates_per_persistent_step):
-          self._persistence_step()
+        for _ in range(self._num_updates_per_reincarnation_step):
+          self._reincarnation_step()
         self.training_steps += 1
     else:
       self.training_step()
@@ -202,5 +198,5 @@ class PersistentDQNAgent(dqn_agent.JaxDQNAgent):
       self._train_step()
     return self.teacher_agent.step(None, observation)
 
-  def _persistence_step(self):
+  def _reincarnation_step(self):
     raise NotImplementedError
