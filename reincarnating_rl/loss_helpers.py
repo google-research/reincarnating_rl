@@ -226,14 +226,11 @@ def q_learning_loss(q_values, target, actions, loss_type='huber',
   return loss, q_value_statistics
 
 
-def q_learning_loss_fn(network_def, states, actions, loss_type='huber',
-                       use_vision_transformer=False):
+def q_learning_loss_fn(network_def, states, actions, loss_type='huber'):
   """Loss function for running Q-learning step."""
 
   def loss_fn(params, target):
     def q_online(state):
-      if use_vision_transformer:
-        return network_def.apply(params, state, train=True)
       return network_def.apply(params, state)
     q_values = jax.vmap(q_online)(states).q_values
     q_values = jnp.squeeze(q_values)
