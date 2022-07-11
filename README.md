@@ -5,7 +5,9 @@ This codebase provides the open source implementation using the
 [Beyond Tabula Rasa: Reincarnating RL][paper]. In this work, we leverage the
 policy from an existing agent (e.g., DQN trained for 400M environment frames) to
 reincarnate another deep Q-learning agent. Refer to
-[agarwl.github.io/reincarnating-rl][project_page] for the project page.
+[agarwl.github.io/reincarnating_rl][project_page] for the project page.
+
+*This release is a work-in-progress. More instructions to be added soon.*
 
 ## Downloading Teacher Checkpoints
 
