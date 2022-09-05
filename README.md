@@ -75,7 +75,7 @@ checkpoints of a DQN (Adam) trained for 400M frames on `Breakout`.
 
 ```
 export TEACHER_CKPT_DIR="<Insert directory name here>"
-mkdir -p $TEACHER_CKPT_DIR/Pong
+mkdir -p $TEACHER_CKPT_DIR/Breakout
 gsutil -m cp -R gs://rl_checkpoints/DQN_400/Breakout/1 $TEACHER_CKPT_DIR/Breakout
 ```
 
