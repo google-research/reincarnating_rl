@@ -1,0 +1,4 @@
+ale-py==0.7.5
+AutoROM==0.4.2
+AutoROM.accept-rom-license==0.4.2
+dopamine-rl==4.0.5

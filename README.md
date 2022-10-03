@@ -2,7 +2,7 @@
 
 This codebase provides the open source implementation using the
 [Dopamine][dopamine] framework for running Atari experiments in
-[Beyond Tabula Rasa: Reincarnating RL][paper]. In this work, we leverage the
+[Reincarnating RL][paper]. In this work, we leverage the
 policy from an existing agent (e.g., DQN trained for 400M environment frames) to
 reincarnate another deep Q-learning agent. Refer to
 [agarwl.github.io/reincarnating_rl][project_page] for the project page.
@@ -76,7 +76,7 @@ checkpoints of a DQN (Adam) trained for 400M frames on `Breakout`.
 ```
 export TEACHER_CKPT_DIR="<Insert directory name here>"
 mkdir -p $TEACHER_CKPT_DIR/Breakout
-gsutil -m cp -R gs://rl_checkpoints/DQN_400/Breakout/1 $TEACHER_CKPT_DIR/Breakout
+gsutil -m cp -R gs://rl_checkpoints/DQN_400/Breakout $TEACHER_CKPT_DIR
 ```
 
 Assuming that you have cloned the [reincarnating_rl][repo] repository, run the
@@ -134,14 +134,14 @@ python -um reincarnating_rl.train \
 If you find this open source release useful, please reference in your paper:
 
 > Agarwal, R., Schwarzer, M., Castro, P. S., Courville, A., & Bellemare, M. G.
-> (2022). Beyond Tabula Rasa: Reincarnating Reinforcement Learning *arXiv
-> preprint arXiv:2206.01626*.
+> (2022). Reincarnating Reinforcement Learning: Reusing Prior Computation 
+> to Accelerate Progress *arXiv preprint arXiv:2206.01626*.
 
 ```
-@article{agarwal2022beyond,
-  title={Beyond Tabula Rasa: Reincarnating Reinforcement Learning},
+@inproceedings{agarwal2022beyond,
+  title={Reincarnating Reinforcement Learning: Reusing Prior Computation to Accelerate Progress},
   author={Agarwal, Rishabh and Schwarzer, Max and Castro, Pablo Samuel and Courville, Aaron and Bellemare, Marc G},
-  journal={arXiv preprint arXiv:2206.01626},
+  booktitle={Thirty-Sixth Conference on Neural Information Processing Systems},
   year={2022}
 }
 ```
