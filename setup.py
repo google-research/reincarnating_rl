@@ -37,9 +37,9 @@ description = (
     'Reincarnating RL: Open-source code for NeurIPS 2022 publication.')
 
 setup(
-    name='rliable',
+    name='reincarnating_rl',
     version='1.0.0',
-    description=rliable_description,
+    description=description,
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/google-research/reincarnating_rl',
