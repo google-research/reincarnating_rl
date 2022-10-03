@@ -26,8 +26,8 @@ from dopamine.discrete_domains import run_experiment
 from dopamine.metrics import statistics_instance
 import gin
 import numpy as onp
-from reincarnating_rl import atari_scores
-from reincarnating_rl import checkpoint_helpers
+import atari_scores
+import checkpoint_helpers
 import tensorflow as tf
 
 
