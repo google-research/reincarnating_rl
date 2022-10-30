@@ -1,4 +1,4 @@
-# Beyond Tabula Rasa: Reincarnating Reinforcement Learning
+# Reincarnating Reinforcement Learning: Reusing Prior Computation to Accelerate Progress
 
 This codebase provides the open source implementation using the
 [Dopamine][dopamine] framework for running Atari experiments in
