@@ -3,7 +3,7 @@
 
 # Reincarnating Reinforcement Learning: Reusing Prior Computation to Accelerate Progress
 
-<p class="cover" align="center"> <img src="https://agarwl.github.io/images/research/RRL.gif" width="90%" /> </p>
+<p class="cover" align="center"> <img src="RRL.gif" width="80%" /> </p>
 
 This codebase provides the open source implementation using the
 [Dopamine][dopamine] framework for running Atari experiments in
