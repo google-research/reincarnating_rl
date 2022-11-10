@@ -1,4 +1,9 @@
+
+# [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1ktlNni_vwFpFtCgUez-RHW0OdGc2U_Wv?usp=sharing) [![Website](https://img.shields.io/badge/www-Website-green)](https://agarwl.github.io/reincarnating_rl) [![Blog](https://img.shields.io/badge/b-Blog-blue)](https://ai.googleblog.com/2022/11/beyond-tabula-rasa-reincarnating.html)
+
 # Reincarnating Reinforcement Learning: Reusing Prior Computation to Accelerate Progress
+
+<p class="cover" align="center"> <img src="https://agarwl.github.io/images/research/RRL.gif" width="90%" /> </p>
 
 This codebase provides the open source implementation using the
 [Dopamine][dopamine] framework for running Atari experiments in
