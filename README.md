@@ -91,12 +91,11 @@ Assuming that you have cloned the [reincarnating_rl][repo] repository, run the
 cd reincarnating_rl
 python -um reincarnating_rl.train \
   --agent qdagger_rainbow \
-  --gin_files reincarnating_rl/configs/qdagger_rainbow.gin
+  --gin_files reincarnating_rl/configs/qdagger_rainbow.gin \
   --base_dir /tmp/qdagger_rainbow \
   --teacher_checkpoint_dir $TEACHER_CKPT_DIR/Breakout/1 \
-  --teacher_checkpoint_number 399
+  --teacher_checkpoint_number 399 \
   --run_number=1 \
-  --atari_roms_path=/tmp/atari_roms \
   --alsologtostderr
 ```
 
@@ -112,7 +111,7 @@ command:
 ```
 python -um reincarnating_rl.train \
   --agent qdagger_rainbow \
-  --gin_files reincarnating_rl/configs/qdagger_rainbow.gin
+  --gin_files reincarnating_rl/configs/qdagger_rainbow.gin \
   --base_dir /tmp/qdagger_rainbow \
   --teacher_checkpoint_dir $TEACHER_CKPT_DIR/Breakout/1 \
   --teacher_checkpoint_number 399 \
