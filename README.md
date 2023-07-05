@@ -1,7 +1,12 @@
 
 # [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1ktlNni_vwFpFtCgUez-RHW0OdGc2U_Wv?usp=sharing) [![Website](https://img.shields.io/badge/www-Website-green)](https://agarwl.github.io/reincarnating_rl) [![Blog](https://img.shields.io/badge/b-Blog-blue)](https://ai.googleblog.com/2022/11/beyond-tabula-rasa-reincarnating.html)
 
+
+
 # Reincarnating Reinforcement Learning: Reusing Prior Computation to Accelerate Progress
+
+## [(External Replication) Working implementation in CleanRL](https://github.com/vwxyzjn/cleanrl/pull/344)
+
 
 <p class="cover" align="center"> <img src="RRL.gif" width="80%" /> </p>
 
