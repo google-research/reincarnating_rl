@@ -24,7 +24,7 @@ JaxFullRainbowAgent.double_dqn = False
 JaxFullRainbowAgent.num_atoms = 51
 JaxFullRainbowAgent.vmax = 10.
 JaxFullRainbowAgent.replay_scheme = 'prioritized'
-JaxFullRainbowAgent.epsilon_fn = @loss_helpers.persistence_linearly_decaying_epsilon
+JaxFullRainbowAgent.epsilon_fn = @loss_helpers.reincarnation_linearly_decaying_epsilon
 
 # Note these parameters are different from C51's.
 create_linear_schedule.initial_lr = 1e-4 # Used for offline training

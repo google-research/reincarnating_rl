@@ -29,7 +29,7 @@ JaxFullRainbowAgent.distributional = False  # DrQ (Efficient DQN)
 JaxFullRainbowAgent.num_atoms = 1  # Since DrQ uses DQN, rather than C51
 JaxFullRainbowAgent.num_updates_per_train_step = 1
 JaxFullRainbowAgent.replay_scheme = 'uniform'
-JaxFullRainbowAgent.epsilon_fn = @loss_helpers.persistence_linearly_decaying_epsilon
+JaxFullRainbowAgent.epsilon_fn = @loss_helpers.reincarnation_linearly_decaying_epsilon
 
 create_linear_schedule.initial_lr = 1e-4 # Used for offline training.
 create_linear_schedule.final_lr = 1e-5 # Used for online-fine tuning
